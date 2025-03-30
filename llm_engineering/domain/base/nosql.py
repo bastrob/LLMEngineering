@@ -78,7 +78,19 @@ class NoSQLBaseDocument(BaseModel, Generic[T], ABC):
             logger.exception(f"Failed to retrieve document with filter options: {filter_options}")
 
             raise
-        
+    
+    @classmethod
+    def bulk_insert(cls: Type[T], documents: list[T], **kwargs) -> bool:
+        collection = _database[cls.get_collection_name()]
+        try:
+            collection.insert_many([doc.to_mongo(**kwargs) for doc in documents])
+
+            return True
+        except (errors.WriteError, errors.BulkWriteError):
+            logger.error(f"Failed to insert documents of type {cls.__name__}")
+
+            return False
+
     @classmethod
     def find(cls: Type[T], **filter_options) -> T | None:
         collection = _database[cls.get_collection_name()]
@@ -92,6 +104,17 @@ class NoSQLBaseDocument(BaseModel, Generic[T], ABC):
             logger.error("Failed to retrieve document.")
 
             return None
+    
+    @classmethod
+    def bulk_find(cls: Type[T], **filter_options) -> list[T]:
+        collection = _database[cls.get_collection_name()]
+        try:
+            instances = collection.find(filter_options)
+            return [document for instance in instances if (document := cls.from_mongo(instance)) is not None]
+        except errors.OperationFailure:
+            logger.errors("Failed to retrieve document.")
+
+            return []
 
     @classmethod
     def get_collection_name(cls: Type[T]) -> str:
