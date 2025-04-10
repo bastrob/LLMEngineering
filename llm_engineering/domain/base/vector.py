@@ -1,6 +1,6 @@
 import uuid
 from abc import ABC
-from typing import Generic, Type, TypeVar
+from typing import Any, Generic, Callable, Dict, Type, TypeVar
 from uuid import UUID
 
 import numpy as np
@@ -10,7 +10,9 @@ from qdrant_client.http import exceptions
 from qdrant_client.http.models import Distance, VectorParams
 from qdrant_client.models import CollectionInfo, PointStruct, Record
 
+from llm_engineering.application.networks.embeddings import EmbeddingModelSingleton
 from llm_engineering.domain.exceptions import ImproperlyConfigured
+from llm_engineering.domain.types import DataCategory
 from llm_engineering.infrastructure.db.qdrant import connection
 
 T = TypeVar("T", bound="VectorBaseDocument")
@@ -66,7 +68,7 @@ class VectorBaseDocument(BaseModel, Generic[T], ABC):
             cls.create_collection()
 
             try:
-                cls._bulk_inster(documents)
+                cls._bulk_insert(documents)
             except exceptions.UnexpectedResponse:
                 logger.error(f"Failed to insert documents in '{cls.get_collection_name()}'.")
 
@@ -136,6 +138,31 @@ class VectorBaseDocument(BaseModel, Generic[T], ABC):
         documents = [cls.from_record(record) for record in records]
 
         return documents
+
+    @classmethod
+    def create_collection(cls: Type[T]) -> bool:
+        collection_name = cls.get_collection_name()
+        use_vector_index = cls.get_use_vector_index()
+
+        return cls._create_collection(collection_name=collection_name, use_vector_index=use_vector_index)
+    
+    @classmethod
+    def _create_collection_name(cls: Type[T], collection_name: str, use_vector_index: bool) -> bool:
+        if use_vector_index is True:
+            vectors_config = VectorParams(size=EmbeddingModelSingleton().embedding_size, distance=Distance.COSINE)
+        else:
+            vectors_config = {}
+        
+        return connection.create_collection(collection_name=collection_name, vectors_config=vectors_config)
+
+    @classmethod
+    def get_category(cls: Type[T]) -> DataCategory:
+        if not hasattr(cls, "Config") or not hasattr(cls.Config, "category"):
+            raise ImproperlyConfigured(
+                "The class should define a Config class with"
+                "the 'category' property that reflects the collection's data category."
+            )
+        return cls.Config.category
     
     @classmethod
     def get_collection_name(cls: Type[T]) -> str:
@@ -144,4 +171,29 @@ class VectorBaseDocument(BaseModel, Generic[T], ABC):
                 "The class should define a Config class with" "the 'name' property that reflects the collection's name."
             )
         return cls.Config.name
+    
+    @classmethod
+    def get_use_vector_index(cls: Type[T]) -> bool:
+        if not hasattr(cls, "Config") or not hasattr(cls.Config, "use_vector_index"):
+            return True
+        
+        return cls.Config.use_vector_index
+    
+    @classmethod
+    def group_by_class(
+        cls: Type["VectorBaseDocument"], documents: list["VectorBaseDocument"]
+    ) -> Dict["VectorBaseDocument", list["VectorBaseDocument"]]:
+        return cls._group_by(documents, selector=lambda doc: doc.__class__)
+
+    @classmethod
+    def _group_by(cls: Type[T], documents: list[T], selector: Callable[[T], Any]) -> Dict[Any, list[T]]:
+        grouped = {}
+        for doc in documents:
+            key = selector(doc)
+
+            if key not in grouped:
+                grouped[key] = []
+            grouped[key].append(doc)
+        
+        return grouped
     

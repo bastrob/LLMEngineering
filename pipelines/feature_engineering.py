@@ -1,6 +1,6 @@
 from zenml import pipeline
 
-from steps.etl import feature_engineering as fe_steps
+from steps import feature_engineering as fe_steps
 
 @pipeline
 def feature_engineering(author_full_names: list[str]) -> None:

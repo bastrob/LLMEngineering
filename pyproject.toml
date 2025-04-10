@@ -74,6 +74,8 @@ run-digital-data-etl = [
     "run-digital-data-etl-bast-rob"
 ]
 
+run-feature-engineering-pipeline = "poetry run python -m tools.run --no-cache --run-feature-engineering"
+
 # Infrastructure
 ## Local infrastructure
 local-docker-infrastructure-up = "docker compose up -d"
