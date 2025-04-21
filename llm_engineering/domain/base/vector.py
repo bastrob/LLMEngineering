@@ -39,7 +39,7 @@ class VectorBaseDocument(BaseModel, Generic[T], ABC):
             "id": _id,
             **payload,
         }
-        if cls._has_class_attributes("embedding"):
+        if cls._has_class_attribute("embedding"):
             payload["embedding"] = point.vector or None
         
         return cls(**attributes)
@@ -147,7 +147,7 @@ class VectorBaseDocument(BaseModel, Generic[T], ABC):
         return cls._create_collection(collection_name=collection_name, use_vector_index=use_vector_index)
     
     @classmethod
-    def _create_collection_name(cls: Type[T], collection_name: str, use_vector_index: bool) -> bool:
+    def _create_collection(cls: Type[T], collection_name: str, use_vector_index: bool) -> bool:
         if use_vector_index is True:
             vectors_config = VectorParams(size=EmbeddingModelSingleton().embedding_size, distance=Distance.COSINE)
         else:
@@ -184,6 +184,10 @@ class VectorBaseDocument(BaseModel, Generic[T], ABC):
         cls: Type["VectorBaseDocument"], documents: list["VectorBaseDocument"]
     ) -> Dict["VectorBaseDocument", list["VectorBaseDocument"]]:
         return cls._group_by(documents, selector=lambda doc: doc.__class__)
+    
+    @classmethod
+    def group_by_category(cls: Type[T], documents: list[T]) -> Dict[DataCategory, list[T]]:
+        return cls._group_by(documents, selector=lambda doc: doc.get_category())
 
     @classmethod
     def _group_by(cls: Type[T], documents: list[T], selector: Callable[[T], Any]) -> Dict[Any, list[T]]:
@@ -196,4 +200,15 @@ class VectorBaseDocument(BaseModel, Generic[T], ABC):
             grouped[key].append(doc)
         
         return grouped
+    
+    @classmethod
+    def _has_class_attribute(cls: Type[T], attribute_name: str) -> bool:
+        if attribute_name in cls.__annotations__:
+            return True
+
+        for base in cls.__bases__:
+            if hasattr(base, "_has_class_attribute") and base._has_class_attribute(attribute_name):
+                return True
+
+        return False
     

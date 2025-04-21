@@ -11,6 +11,6 @@ class Prompt(VectorBaseDocument):
     class Config:
         category = DataCategory.PROMPT
 
-class GeneratedDatasetSamplesPrompt(Prompt):
+class GenerateDatasetSamplesPrompt(Prompt):
     data_category: DataCategory
     document: CleanedDocument

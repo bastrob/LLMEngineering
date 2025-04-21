@@ -15,7 +15,7 @@ def load_to_vector_db(documents: Annotated[list, "documents"]) -> Annotated[bool
 
         for document_batch in utils.misc.batch(documents, size=4):
             try:
-                document_batch.bulk_insert(document_batch)
+                document_class.bulk_insert(document_batch)
             except Exception:
                 return False
     
