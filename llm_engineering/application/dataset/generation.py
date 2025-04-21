@@ -1,11 +1,16 @@
 from abc import ABC
 
 import tiktoken
+from langchain_core.exceptions import OutputParserException
+from langchain_core.language_models.fake import FakeListLLM
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_core.prompts import PromptTemplate
+from langchain_openai import ChatOpenAI
+from loguru import logger
 
 
 from llm_engineering.domain.cleaned_documents import CleanedDocument
-from llm_engineering.domain.dataset import DatasetType
+from llm_engineering.domain.dataset import DatasetType, TrainTestSplit
 from llm_engineering.domain.prompt import GenerateDatasetSamplesPrompt, Prompt
 from llm_engineering.domain.types import DataCategory
 from llm_engineering.settings import settings
@@ -15,8 +20,31 @@ from . import utils as generation_utils
 
 class DatasetGenerator(ABC):
     tokenizer = tiktoken.encoding_for_model(settings.OPENAI_MODEL_ID)
+    dataset_type: DatasetType | None = None
+
+    system_prompt_template = """You are a helpful assistant who generates {dataset_format} based on the given context. \
+Provide your response in JSON format.
+"""
     prompt_template_str: str | None = None
     
+    @classmethod
+    def get_system_prompt(cls) -> Prompt:
+        assert cls.dataset_type is not None, "Dataset type must be set before calling get_system_prompt()"
+
+        dataset_format = (
+            "instruction-answer pairs" if cls.dataset_type == DatasetType.INSTRUCTION else "instruction-answer triples"
+        )
+        input_variables = {
+            "dataset_format": dataset_format,
+        }
+        system_prompt = cls.system_prompt_template.format(**input_variables)
+
+        return Prompt(
+            template=cls.system_prompt_template,
+            input_variables=input_variables,
+            content=system_prompt,
+        )
+
     @classmethod
     def get_prompts(cls, documents: list[CleanedDocument]) -> dict[DataCategory, list[GenerateDatasetSamplesPrompt]]:
         documents = generation_utils.extract_subtrings(documents)
@@ -58,6 +86,30 @@ class DatasetGenerator(ABC):
         )
 
         return prompt
+    
+    @classmethod
+    def generate(
+        cls,
+        prompts: dict[DataCategory, list[GenerateDatasetSamplesPrompt]],
+        test_size: float = 0.2,
+        mock: bool = False,
+    ) -> TrainTestSplit:
+        assert cls.dataset_type is not None, "Dataset type must be set before calling generate()"
+
+        def _to_langchain(
+            prompt: GenerateDatasetSamplesPrompt,
+        ) -> list[BaseMessage]:
+            messages = [
+                SystemMessage(content=cls.get_system_prompt().content),
+                HumanMessage(content=prompt)
+            ]
+
+            return messages
+
+        if mock:
+            pass
+        else:
+            assert settings.OPENAI_API_KEY is not None, "OpenAI API key must be set to generate datasets"
 
 
 class InstructionDatasetGenerator(DatasetGenerator):
