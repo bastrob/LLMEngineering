@@ -46,5 +46,5 @@ def chunk_article(text: str, min_length: int, max_length: int) -> list[str]:
 
     if len(current_chunk) >= min_length:
         extracts.append(current_chunk.strip())
-    
+
     return extracts

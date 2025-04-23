@@ -1,4 +1,6 @@
+from loguru import logger
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from zenml.client import Client
 
 
 class Settings(BaseSettings):
@@ -7,6 +9,9 @@ class Settings(BaseSettings):
     # OpenAI API
     OPENAI_MODEL_ID: str = "gpt-4o-mini"
     OPENAI_API_KEY: str | None = None
+
+    # Huggingface API
+    HUGGINGFACE_ACCESS_TOKEN: str | None = None
 
     # RAG
     TEXT_EMBEDDING_MODEL_ID: str = "sentence-transformers/all-MiniLM-L6-v2"
@@ -44,7 +49,24 @@ class Settings(BaseSettings):
 
     @classmethod
     def load_settings(cls) -> "Settings":
-        settings = Settings()
+        """
+        Tries to load the settings from the ZenML secret store. If the secret does not exist, it initializes the settings from the .env file and default values.
+
+        Returns:
+            Settings: The initialized settings object.
+        """
+
+        try:
+            logger.info("Loading settings from the ZenML secret store.")
+
+            settings_secrets = Client().get_secret("settings")
+            settings = Settings(**settings_secrets.secret_values)
+        except (RuntimeError, KeyError):
+            logger.warning(
+                "Failed to load settings from the ZenML secret store. Defaulting to loading the settings from the '.env' file."
+            )
+            settings = Settings()
+
         return settings
         
 

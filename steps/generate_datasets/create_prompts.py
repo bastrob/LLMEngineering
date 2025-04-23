@@ -13,10 +13,9 @@ def create_prompts(
 ) -> Annotated[dict[DataCategory, list[GenerateDatasetSamplesPrompt]], "prompts"]:
     dataset_generator = generation.get_dataset_generator(dataset_type)
     grouped_prompts = dataset_generator.get_prompts(documents)
-
+    print(grouped_prompts)
     step_context = get_step_context()
     step_context.add_output_metadata(output_name="prompts", metadata=_get_metadata(grouped_prompts))
-    
     return grouped_prompts
 
 

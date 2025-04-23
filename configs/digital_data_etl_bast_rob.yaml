@@ -1,9 +1,4 @@
 parameters:
-    user_full_name: "Bast Rob"
+    user_full_name: Bast Rob
     links:
-      # Medium
-      - https://medium.com/@elisowski/ai-agents-vs-agentic-ai-whats-the-difference-and-why-does-it-matter-03159ee8c2b4
-      # Github
-      - https://github.com/bastrob/Transformers_learning
-      # Substack
-    
+    - https://maximelabonne.substack.com/p/uncensor-any-llm-with-abliteration-d30148b7d43e

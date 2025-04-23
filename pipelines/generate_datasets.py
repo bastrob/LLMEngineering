@@ -16,5 +16,10 @@ def generate_datasets(
     prompts = cd_steps.create_prompts(documents=cleaned_documents, dataset_type=dataset_type)
     if dataset_type == DatasetType.INSTRUCTION:
         dataset = cd_steps.generate_instruction_dataset(prompts=prompts, test_split_size=test_split_size, mock=mock)
+    elif dataset_type == DatasetType.PREFERENCE:
+        pass
     else:
         raise ValueError(f"Invalid dataset type: {dataset_type}")
+    
+    if push_to_huggingface:
+        cd_steps.push_to_huggingface(dataset=dataset, dataset_id=dataset_id)
