@@ -3,14 +3,20 @@ from pathlib import Path
 import os
 from dotenv import load_dotenv
 
+from unsloth import PatchDPOTrainer
+
+PatchDPOTrainer()
+
 from typing import Any, List, Literal, Optional
 
 import comet_ml
 from unsloth import FastLanguageModel, is_bfloat16_supported
 from unsloth.chat_templates import get_chat_template
 import torch
-from trl import SFTTrainer
+from trl import DPOConfig, DPOTrainer, SFTTrainer
 from datasets import load_dataset, concatenate_datasets
+from huggingface_hub import HfApi
+from huggingface_hub.utils import RepositoryNotFoundError
 from transformers import TrainingArguments, TextStreamer
 
 
@@ -140,7 +146,57 @@ def finetune(
         )
 
     elif finetuning_type == "dpo":
-        raise ValueError("TODO dpo finetuning.")
+        
+        def format_samples_dpo(example):
+            example["prompt"] = alpaca_template.format(example["prompt"], "")
+            example["chosen"] = example["chosen"] + EOS_TOKEN
+            example["rejected"] = example["rejected"] + EOS_TOKEN
+
+            return {"prompt": example["prompt"], "chosen": example["chosen"], "rejected": example["rejected"]}
+
+        dataset = load_dataset(f"{dataset_huggingface_workspace}/llmtwin-dpo", split="train")
+        if is_dummy:
+            try:
+                dataset = dataset.select(range(400))
+            except Exception:
+                print("Dummy mode active. Failed to trim the dataset to 400 samples.")
+        print(f"Loaded dataset with {len(dataset)} samples.")
+
+        dataset = dataset.map(format_samples_dpo)
+        dataset = dataset.train_test_split(test_size=0.05)
+
+        print("Training dataset example:")
+        print(dataset["train"][0])
+
+        trainer = DPOTrainer(
+            model=model,
+            ref_model=None,
+            tokenizer=tokenizer,
+            beta=beta,
+            train_dataset=dataset["train"],
+            eval_dataset=dataset["test"],
+            max_length=max_seq_length // 2,
+            max_prompt_length=max_seq_length // 2,
+            args=DPOConfig(
+                learning_rate=learning_rate,
+                num_train_epochs=num_train_epochs,
+                per_device_train_batch_size=per_device_train_batch_size,
+                gradient_accumulation_steps=gradient_accumulation_steps,
+                fp16=not is_bfloat16_supported(),
+                bf16=is_bfloat16_supported(),
+                optim="adamw_8bit",
+                weight_decay=0.01,
+                lr_scheduler_type="linear",
+                per_device_eval_batch_size=per_device_train_batch_size,
+                warmup_steps=10,
+                output_dir=output_dir,
+                eval_steps=0.2,
+                logging_steps=1,
+                report_to="comet_ml",
+                seed=0,
+            ),
+        )
+
     else:
         raise ValueError("Invalid finetuning_type. Choose 'sft' or 'dpo'.")
 
@@ -167,6 +223,19 @@ def save_model(model: Any, tokenizer: Any, output_dir: str, push_to_hub: bool = 
     if push_to_hub and repo_id:
         print(f"Saving model to '{repo_id}'")
         model.push_to_hub_merged(repo_id, tokenizer, save_method="merged_16bit")
+
+def check_if_huggingface_model_exists(model_id: str, default_value: str = "bastr/TwinLlama-3.1-8B") -> str:
+    api = HfApi()
+
+    try:
+        api.model_info(model_id)
+    except RepositoryNotFoundError:
+        print(f"Model '{model_id}' does not exist.")  # noqa
+        model_id = default_value
+        print(f"Defaulting to '{model_id}'")  # noqa
+        print("Train your own 'TwinLlama-3.1-8B' to avoid this behavior.")  # noqa
+
+    return model_id
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -219,3 +288,25 @@ if __name__ == "__main__":
         sft_output_model_repo_id = f"{args.model_output_huggingface_workspace}/TwinLlama-3.1-8B"
         save_model(model, tokenizer, "model_sft", push_to_hub=True, repo_id=sft_output_model_repo_id)
 
+    elif args.finetuning_type == "dpo":
+        print("Starting DPO training...")
+
+        sft_base_model_repo_id = f"{args.model_output_huggingface_workspace}/TwinLlama-3.1-8B"
+        sft_base_model_repo_id = check_if_huggingface_model_exists(sft_base_model_repo_id)
+        print(f"Training from base model '{sft_base_model_repo_id}'")
+
+        output_dir_dpo = Path(args.model_dir) / "output_dpo"
+        model, tokenizer = finetune(
+            finetuning_type="dpo",
+            model_name=sft_base_model_repo_id,
+            output_dir=str(output_dir_dpo),
+            dataset_huggingface_workspace=args.dataset_huggingface_workspace,
+            num_train_epochs=1,
+            per_device_train_batch_size=args.per_device_train_batch_size,
+            learning_rate=2e-6,
+            is_dummy=args.is_dummy,
+        )
+        inference(model, tokenizer)
+
+        dpo_output_model_repo_id = f"{args.model_output_huggingface_workspace}/TwinLlama-3.1-8B-DPO"
+        save_model(model, tokenizer, "model_dpo", push_to_hub=True, repo_id=dpo_output_model_repo_id)
