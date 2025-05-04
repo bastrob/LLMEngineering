@@ -69,17 +69,25 @@ Examples:
     default=False,
     help="Whether to run the instruct dataset generation pipeline.",
 )
+@click.option(
+    "--run-generate-preference-datasets",
+    is_flag=True,
+    default=False,
+    help="Whether to run the preference dataset generation pipeline.",
+)
 def main(
     no_cache: bool = False,
     run_etl: bool = False,
     etl_config_filename: str = "digital_data_etl_bast_rob.yaml",
     run_feature_engineering: bool = False,
     run_generate_instruct_datasets: bool = False,
+    run_generate_preference_datasets: bool = False,
 ) -> None:
     assert(
         run_etl
         or run_feature_engineering
         or run_generate_instruct_datasets
+        or run_generate_preference_datasets
     ), "Please specify an action to run."
 
     pipeline_args = {
@@ -105,6 +113,12 @@ def main(
         run_args_cd = {}
         pipeline_args["config_path"] = root_dir / "configs" / "generate_instruct_datasets.yaml"
         pipeline_args["run_name"] = f"generate_instruct_datasets_run_{dt.now().strftime('%Y_%m_%d_%H_%M_%S')}"
+        generate_datasets.with_options(**pipeline_args)(**run_args_cd)
+
+    if run_generate_preference_datasets:
+        run_args_cd = {}
+        pipeline_args["config_path"] = root_dir / "configs" / "generate_preference_datasets.yaml"
+        pipeline_args["run_name"] = f"generate_preference_datasets{dt.now().strftime('%Y_%m_%d_%H_%M_%S')}"
         generate_datasets.with_options(**pipeline_args)(**run_args_cd)
 
 if __name__ == "__main__":

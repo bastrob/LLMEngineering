@@ -164,7 +164,20 @@ Provide your response in JSON format.
     def post_process_datasets(
         cls, datasets: dict[DataCategory, domain.dataset.InstructDataset], test_size: float
     ) -> TrainTestSplit:
-        pass
+        datasets = generation_utils.filter_short_answers(datasets)
+        datasets = generation_utils.filter_answer_format(datasets)
+
+        remaining_samples = sum([dataset.num_samples for dataset in datasets.values()])
+
+        logger.info(
+            f"Filtered out short answers and answers with incorrect format. Remaining samples: {remaining_samples}"
+        )
+
+        train_test_split = generation_utils.create_preference_train_test_split(
+            datasets, test_size=test_size, random_state=42
+        )
+
+        return train_test_split
 
 
 class InstructionDatasetGenerator(DatasetGenerator):
@@ -206,8 +219,51 @@ Extract:
 
 
 class PreferenceDatasetGenerator(DatasetGenerator):
-    pass
+    dataset_type = DatasetType.PREFERENCE
 
+    prompt_template_str = prompt_template_str = """Based on the following extract, generate five instruction-answer triples. Each triple should consist of:
+1. An instruction asking about a specific topic in the context.
+2. A generated answer that attempts to answer the instruction based on the context, named as 'rejected'.
+3. An extracted answer that is a relevant excerpt directly from the given context, named as 'chosen'.
+
+Instructions must be self-contained and general, without explicitly mentioning a context, system, course, or extract.
+
+Important:
+- Ensure that the extracted answer, the chosen one, is a verbatim copy from the context, including all punctuation and apostrophes.
+- Do not add any ellipsis (...) or [...]  to indicate skipped text in the extracted answer.
+- If the relevant text is not continuous, use two separate sentences from the context instead of skipping text.
+
+Structure the answer in JSON format, ready to be loaded in Python by json.loads(), as a list of objects.
+Do not add any extra characters and provide your response in JSON format with the following structure:
+[
+    {
+        "instruction": "...",
+        "rejected": "...",
+        "chosen": "..."
+    },
+    ...
+]
+
+Extract:
+{{extract}}
+"""
+    @classmethod
+    def post_process_datasets(
+        cls, datasets: dict[DataCategory, domain.dataset.PreferenceDataset], test_size: float
+        ) -> TrainTestSplit:
+        datasets = generation_utils.filter_short_answers(datasets)
+        datasets = generation_utils.filter_answer_format(datasets)
+
+        remaining_samples = sum([dataset.num_samples for dataset in datasets.values()])
+        logger.info(
+            f"Filtered out short answers and answers with incorrect format. Remaining samples: {remaining_samples}"
+        )
+
+        train_test_split = generation_utils.create_preference_train_test_split(
+            datasets, test_size=test_size, random_state=42
+        )
+
+        return train_test_split
 
 def get_dataset_generator(dataset_type: DatasetType) -> type[DatasetGenerator]:
     if dataset_type == DatasetType.INSTRUCTION:

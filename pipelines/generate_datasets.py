@@ -17,7 +17,7 @@ def generate_datasets(
     if dataset_type == DatasetType.INSTRUCTION:
         dataset = cd_steps.generate_instruction_dataset(prompts=prompts, test_split_size=test_split_size, mock=mock)
     elif dataset_type == DatasetType.PREFERENCE:
-        pass
+        dataset = cd_steps.generate_preference_dataset(prompts=prompts, test_split_size=test_split_size, mock=mock)
     else:
         raise ValueError(f"Invalid dataset type: {dataset_type}")
     

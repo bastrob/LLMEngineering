@@ -12,6 +12,10 @@ class Settings(BaseSettings):
 
     # Huggingface API
     HUGGINGFACE_ACCESS_TOKEN: str | None = None
+    HF_TOKEN: str | None = None
+
+    # Comet API
+    COMET_API_KEY: str | None = None
 
     # RAG
     TEXT_EMBEDDING_MODEL_ID: str = "sentence-transformers/all-MiniLM-L6-v2"

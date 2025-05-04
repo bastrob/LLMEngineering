@@ -23,7 +23,12 @@ class InstructDatasetSample(VectorBaseDocument):
 
 
 class PreferenceDatasetSample(VectorBaseDocument):
-    pass
+    instruction: str
+    rejected: str
+    chosen: str
+
+    class Config:
+        category = DataCategory.PREFERENCE_DATASET_SAMPLES
 
 class InstructDataset(VectorBaseDocument):
     category: DataCategory
@@ -70,10 +75,30 @@ class InstructTrainTestSplit(TrainTestSplit):
         category = DataCategory.INSTRUCT_DATASET
 
 class PreferenceDataset(VectorBaseDocument):
-    pass
+    category: DataCategory
+    samples: list[PreferenceDatasetSample]
+    class Config:
+        category = DataCategory.PREFERENCE_DATASET
+    
+    @property
+    def num_samples(self) -> int:
+        return len(self.samples)
+    
+    def to_huggingface(self) -> "Dataset":
+        data = [sample.model_dump() for sample in self.samples]
+
+        return Dataset.from_dict(
+            {"instruction": [d["instruction"] for d in data], "output": [d["answer"] for d in data]}
+        )
+
 
 class PreferenceTrainTestSplit(TrainTestSplit):
-    pass
+    train: dict[DataCategory, PreferenceDataset]
+    test: dict[DataCategory, PreferenceDataset]
+    test_split_size: float
+
+    class Config:
+        category = DataCategory.PREFERENCE_DATASET
 
 def build_dataset(dataset_type, *args, **kwargs) -> InstructDataset | PreferenceDataset:
     if dataset_type == DatasetType.INSTRUCTION:
